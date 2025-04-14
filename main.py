@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 import sqlite3
 
 app = FastAPI()
@@ -16,11 +16,11 @@ con.close()
 
 
 @app.post('/tasks')
-async def create_task(request: Request):
+async def create_task(request: Request, status_code=201):
     data = await request.json()
     title = data.get('title')
     if not title:
-        return {'error': 'Title is required'}
+        raise HTTPException(status_code=400, detail="Title is required")
     complite = data.get('complite', False)
     con = sqlite3.connect('kebula.db')
     cur = con.cursor()
@@ -35,13 +35,42 @@ async def create_task(request: Request):
 
 
 @app.get('/tasks')
-async def get_tasks(request: Request):
+async def get_tasks(request: Request, status_code=200):
     con = sqlite3.connect('kebula.db')
     cur = con.cursor()
     cur.execute('SELECT * FROM tasks')
     tasks = cur.fetchall()
     con.close()
     return [{'id': task[0], 'title': task[1], 'completed': task[2]} for task in tasks]
+
+
+@app.get('/tasks/{task_id}')
+async def get_task(task_id: int, status_code=200):
+    con = sqlite3.connect('kebula.db')
+    cur = con.cursor()
+    cur.execute('SELECT * FROM tasks WHERE id = ?', (task_id,))
+    task = cur.fetchone()
+    con.close()
+    if task:
+        return {'id': task[0], 'title': task[1], 'completed': task[2]}
+    else:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+
+@app.put('/tasks/{task_id}')
+async def update_task(task_id: int, request: Request):
+    data = await request.json()
+    title = data.get('title')
+    complite = data.get('complite')
+    con = sqlite3.connect('kebula.db')
+    cur = con.cursor()
+    if title:
+        cur.execute('UPDATE tasks SET title = ? WHERE id = ?', (title, task_id))
+    if complite is not None:
+        cur.execute('UPDATE tasks SET complite = ? WHERE id = ?', (complite, task_id))
+    con.commit()
+    con.close()
+    return {'message': 'Task updated successfully'}
 
 
 @app.delete('/tasks/{task_id}')
